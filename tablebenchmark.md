@@ -251,7 +251,7 @@ Function File_Find(DirName As String, FileName As String) As String
    If Dir(DirName & FileName)<>"" Then Return DirName & FileName
    D= Dir(DirName,vbDirectory)
    While D <> "" ' look in each subdirectory
-      F=File_Find(DirName & D, FileName)
+      F=File_Find(DirName & "\" & D, FileName)
       If F <> "" Then Return F
    Wend
    Return "" ' file not in this directory
