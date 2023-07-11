@@ -35,8 +35,8 @@ Private Sub Document_AfterExtract(ByVal pXDoc As CASCADELib.CscXDocument)
       'This is a new sample that came from KTA . We need to copy the truth back into the original document
       'But the locators just ran and have incorrect values - we need to ignore them and load the file from the file system.
       RefDoc.Load(pXDoc.FileName)
-      TableBenchmark_Calculate(pXDoc, RefDoc,"LineItems", "Total Price", DefaultAmountFormatter)
       XDocument_CopyFields(RefDoc,pXDoc) 'restore the truth fields into new sample document
+      TableBenchmark_Calculate(pXDoc, RefDoc,"LineItems", "Total Price", DefaultAmountFormatter)
       pXDoc.Save()
       'When you drag an xdoc from samples set to test set it is added to a subfolder. The matching original is in the parent directory
       TestDocFileName=TestSets_FindXDoc(pXDoc.XValues.ItemByName("OriginalFileName").Value)
@@ -57,7 +57,7 @@ Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, Tabl
    Set Field=pXDoc.Fields.ItemByName("TableRowCount")
    Field.Text=CStr(Table.Rows.Count)
    Field.Confidence=1.00: Field.ExtractionConfident=True
-   If SumColumnName<>"" Then
+   If SumColumnNames<>"" Then
       For Each SumColumnName In Split(SumColumnNames,",")
          Set Field=pXDoc.Fields.ItemByName("Table" & Replace(SumColumnName," ","")&"Sum")
          Field.Text=Format(Table.GetColumnSum(Table.Columns.ItemByName(SumColumnName).IndexInTable,SumIsValid),"0.00")
