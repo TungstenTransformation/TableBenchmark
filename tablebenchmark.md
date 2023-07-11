@@ -29,17 +29,19 @@ Option Explicit
 
 Private Sub Document_AfterExtract(ByVal pXDoc As CASCADELib.CscXDocument)
    Dim Truth As Boolean, TruthDoc As New CscXDocument, TestDoc As New CscXDocument, TestDocFileName As String
+   If Project.ScriptExecutionMode <> CscScriptExecutionMode.CscScriptModeServerDesign Then Exit Sub  'Only run benchmark in Transformation Designer, not KTA
    'If the XDoc contains the XValue "OriginalFileName" then it is an online learning sample that came from KTA - so it contains the truth.
    If pXDoc.XValues.ItemExists("OriginalFileName") Then
       Truth = True
       'This is a new sample that came from KTA . We just need to copy the truth back into the original document
       'But the locators just ran and have incorrect values - we need to ignore them and load the file from the file system.
       TruthDoc.Load(pXDoc.FileName)
+      XDocument_CopyFields(TruthDoc,pXDoc) 'restore the truth fields into new sample document
       'When you drag an xdoc from samples set to test set it is added to a subfolder. The matching original is in the parent directory
-      TestDocFileName=Path_GetFolder(Path_GetFolder(pXDoc.FileName)) & pXDoc.XValues.ItemByName("OriginalFileName").Value
-      TestDocFileName=Left(TestDocFileName,InStrRev(TestDocFileName,".")) & "xdc"  'OriginalFileName is probably a tif or pdf
+      TestDocFileName=TestSets_FindXDoc(pXDoc.XValues.ItemByName("OriginalFileName").Value)
+      If TestDocFileName="" Then Exit Sub ' this document is unknown and not in a Test Set
       TestDoc.Load(TestDocFileName)
-      XDocument_CopyFields(TruthDoc,TestDoc)
+      XDocument_CopyFields(TruthDoc,TestDoc) 'copy truth back to original document
       TestDoc.Save()
       Set pXDoc=TestDoc
    End If
@@ -219,10 +221,40 @@ Sub XDocument_CopyFields(A As CscXDocument, B As CscXDocument)
    Next
 End Sub
 
-Function Path_GetFolder(PathName As String) As String
+Function File_GetParentFolder(PathName As String) As String
    'Return the ParentFolder
    If Right(PathName,1)="\" Then PathName=Left(PathName,Len(PathName)-1)
    Return Left(PathName,InStrRev(PathName,"\"))
+End Function
+
+
+Function TestSets_FindXDoc(FileName As String) As String
+   'Search Test and Benchmark sets for this XDocument
+   Dim T As Long, DirName As String, FullPath As String
+   FileName= Left(FileName,InStrRev(FileName,".")) & "xdc"
+   For T=0 To Project.GetDocSetPathTestDocumentsCount
+      DirName = Split(Project.GetDocSetPathTestDocumentsByIndex(T),"|")(0)
+      FullPath=File_Find(DirName,FileName)
+      If FullPath <> "" Then Return FullPath
+   Next
+   For T=0 To Project.GetDocSetPathTestDocumentsCount
+      DirName = Split(Project.GetDocSetPathTestDocumentsByIndex(T),"|")(0)
+      FullPath=File_Find(DirName,FileName)
+      If FullPath <> "" Then Return FullPath
+   Next
+End Function
+
+Function File_Find(DirName As String, FileName As String) As String
+   'Recurse into a Directory to find a file
+   Dim D As String, F As String
+   'Check if file in this directory
+   If Dir(DirName & FileName)<>"" Then Return DirName & FileName
+   D= Dir(DirName,vbDirectory)
+   While D <> "" ' look in each subdirectory
+      F=File_Find(DirName & D, FileName)
+      If F <> "" Then Return F
+   Wend
+   Return "" ' file not in this directory
 End Function
 
 Sub Field_Copy(A As CscXDocField,B As CscXDocField,XScale As Double, YScale As Double) 'copy a field or a table
