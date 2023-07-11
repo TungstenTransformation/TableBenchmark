@@ -28,67 +28,59 @@ Option Explicit
 ' Class script: invoice
 
 Private Sub Document_AfterExtract(ByVal pXDoc As CASCADELib.CscXDocument)
-   Dim Truth As Boolean, TruthDoc As New CscXDocument, TestDoc As New CscXDocument, TestDocFileName As String
+   Dim RefDoc As New CscXDocument, TestDoc As New CscXDocument, TestDocFileName As String
    If Project.ScriptExecutionMode <> CscScriptExecutionMode.CscScriptModeServerDesign Then Exit Sub  'Only run benchmark in Transformation Designer, not KTA
    'If the XDoc contains the XValue "OriginalFileName" then it is an online learning sample that came from KTA - so it contains the truth.
    If pXDoc.XValues.ItemExists("OriginalFileName") Then
-      Truth = True
-      'This is a new sample that came from KTA . We just need to copy the truth back into the original document
+      'This is a new sample that came from KTA . We need to copy the truth back into the original document
       'But the locators just ran and have incorrect values - we need to ignore them and load the file from the file system.
-      TruthDoc.Load(pXDoc.FileName)
-      XDocument_CopyFields(TruthDoc,pXDoc) 'restore the truth fields into new sample document
+      RefDoc.Load(pXDoc.FileName)
+      TableBenchmark_Calculate(pXDoc, RefDoc,"LineItems", "Total Price", DefaultAmountFormatter)
+      XDocument_CopyFields(RefDoc,pXDoc) 'restore the truth fields into new sample document
+      pXDoc.Save()
       'When you drag an xdoc from samples set to test set it is added to a subfolder. The matching original is in the parent directory
       TestDocFileName=TestSets_FindXDoc(pXDoc.XValues.ItemByName("OriginalFileName").Value)
       If TestDocFileName="" Then Exit Sub ' this document is unknown and not in a Test Set
       TestDoc.Load(TestDocFileName)
-      XDocument_CopyFields(TruthDoc,TestDoc) 'copy truth back to original document
+      XDocument_CopyFields(RefDoc,TestDoc) 'copy truth back to original document
       TestDoc.Save()
-      Set pXDoc=TestDoc
+   Else ' this is not a truth document, and we are in Design studio - this is either extraction testing or benchmarking
+      RefDoc.Load(pXDoc.FileName)
+      TableBenchmark_Calculate(pXDoc, RefDoc, "LineItems", "Total Price", DefaultAmountFormatter)
    End If
-   TableBenchmark_Calculate(pXDoc, "LineItems", "Total Price", DefaultAmountFormatter,Truth)
-   If Truth Then pXDoc.Save()
 End Sub
 
-Sub TableBenchmark_Calculate(pXDoc As CscXDocument, TableFieldName As String, SumColumnName, SumColumnAmountFormatter As CscAmountFormatter,Truth As Boolean)
-   'Calculate all the table meta fields for the benchmark.
-   Dim Table As CscXDocTable, SumIsValid As Boolean, Field As CscXDocField, FieldName As String, ErrDescription As String, TruthDoc As New CscXDocument, TruthTable As CscXDocTable
+Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, TableFieldName As String, SumColumnNames, SumColumnAmountFormatter As CscAmountFormatter)
+   'Calculate all the table meta fields for the benchmark using the table in Reference Document as the reference. It may or may not be true.
+   Dim Table As CscXDocTable, SumIsValid As Boolean, Field As CscXDocField, FieldName As String, ErrDescription As String, RefTable As CscXDocTable, SumColumnName As String
    Set Table=pXDoc.Fields.ItemByName(TableFieldName).Table
-   TruthDoc.Load(pXDoc.FileName)
    Set Field=pXDoc.Fields.ItemByName("TableRowCount")
    Field.Text=CStr(Table.Rows.Count)
    Field.Confidence=1.00: Field.ExtractionConfident=True
    If SumColumnName<>"" Then
-      Set Field=pXDoc.Fields.ItemByName("Table" & Replace(SumColumnName," ","")&"Sum")
-      Field.Text=Format(Table.GetColumnSum(Table.Columns.ItemByName(SumColumnName).IndexInTable,SumIsValid),"0.00")
-      If SumIsValid Then SumColumnAmountFormatter.FormatField(Field)
-      Field.Confidence=1.00: Field.ExtractionConfident=True
-   End If
-   If Truth Then
-      'This is the Truth document - we just set all values to perfect "1.00"
-      For Each FieldName In Split("TableRowAlignment TableColumnAlignment TableCells")
-         Set Field=pXDoc.Fields.ItemByName(FieldName)
-         Field.Text="1.00"
-         Field.Confidence=1.00
-         Field.ExtractionConfident=True
+      For Each SumColumnName In Split(SumColumnNames,",")
+         Set Field=pXDoc.Fields.ItemByName("Table" & Replace(SumColumnName," ","")&"Sum")
+         Field.Text=Format(Table.GetColumnSum(Table.Columns.ItemByName(SumColumnName).IndexInTable,SumIsValid),"0.00")
+         If SumIsValid Then SumColumnAmountFormatter.FormatField(Field)
+         Field.Confidence=1.00: Field.ExtractionConfident=True
       Next
-   Else
-   If Not TruthDoc.Fields.Exists(TableFieldName) Then Exit Sub ' There are no fields in the truth document. nothing to do
-   'Here we compare the extracted table with the truth table from the xdoc in the filesystem
-      Set TruthTable=TruthDoc.Fields.ItemByName(TableFieldName).Table
-      Set Field=pXDoc.Fields.ItemByName("TableRowAlignment")
-      Field.Text=Format(Tables_RowAlignment(pXDoc,Table,TruthTable,ErrDescription),"0.00")
-      If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf & " Bad Rows:" & ErrDescription ' so we can see the misaligned row numbers in the benchmark
-      Field.Confidence=1.00: Field.ExtractionConfident=True
-      ErrDescription=""
-      Set Field=pXDoc.Fields.ItemByName("TableColumnAlignment")
-      Field.Text=Format(Tables_ColumnAlignment(pXDoc,Table,TruthTable, ErrDescription),"0.00")
-      If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf & " Bad Columns:" & ErrDescription ' so we can see the misaligned column numbers in the benchmark
-      Field.Confidence=1.00: Field.ExtractionConfident=True
-      Set Field=pXDoc.Fields.ItemByName("TableCells")
-      Field.Text=Format(Tables_CompareCells(Table,TruthTable,ErrDescription),"0.00")
-      If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf&  ErrDescription ' so we can see the wrong text in the benchmark 'only show 10 results!
-      Field.Confidence=1.00: Field.ExtractionConfident=True
    End If
+   If Not RefDoc.Fields.Exists(TableFieldName) Then Exit Sub ' There are no fields in the truth document. nothing to do
+   'Here we compare the extracted table with the truth table from the xdoc in the filesystem
+   Set RefTable=RefDoc.Fields.ItemByName(TableFieldName).Table
+   Set Field=pXDoc.Fields.ItemByName("TableRowAlignment")
+   Field.Text=Format(Tables_RowAlignment(pXDoc,Table,RefTable,ErrDescription),"0.00")
+   If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf & " Bad Rows:" & ErrDescription ' so we can see the misaligned row numbers in the benchmark
+   Field.Confidence=1.00: Field.ExtractionConfident=True
+   ErrDescription=""
+   Set Field=pXDoc.Fields.ItemByName("TableColumnAlignment")
+   Field.Text=Format(Tables_ColumnAlignment(pXDoc,Table,RefTable, ErrDescription),"0.00")
+   If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf & " Bad Columns:" & ErrDescription ' so we can see the misaligned column numbers in the benchmark
+   Field.Confidence=1.00: Field.ExtractionConfident=True
+   Set Field=pXDoc.Fields.ItemByName("TableCells")
+   Field.Text=Format(Tables_CompareCells(Table,RefTable,ErrDescription),"0.00")
+   If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf&  ErrDescription ' so we can see the wrong text in the benchmark 'only show 10 results!
+   Field.Confidence=1.00: Field.ExtractionConfident=True
 End Sub
 
 Function Field_Set(pXDoc As CscXDocument, FieldName As String, FieldText As String, Confidence As Double, ErrDescription As String) As CscXDocField
@@ -233,12 +225,12 @@ Function TestSets_FindXDoc(FileName As String) As String
    Dim T As Long, DirName As String, FullPath As String
    FileName= Left(FileName,InStrRev(FileName,".")) & "xdc"
    For T=0 To Project.GetDocSetPathTestDocumentsCount
-      DirName = Split(Project.GetDocSetPathTestDocumentsByIndex(T),"|")(0)
+      DirName = Split(Project.GetDocSetPathTestDocumentsByIndex(T),"|")(0) & "\"
       FullPath=File_Find(DirName,FileName)
       If FullPath <> "" Then Return FullPath
    Next
-   For T=0 To Project.GetDocSetPathTestDocumentsCount
-      DirName = Split(Project.GetDocSetPathTestDocumentsByIndex(T),"|")(0)
+   For T=0 To Project.GetDocSetPathBenchmarksCount
+      DirName = Split(Project.GetDocSetPathBenchmarksByIndex(T),"|")(0) & "\"
       FullPath=File_Find(DirName,FileName)
       If FullPath <> "" Then Return FullPath
    Next
@@ -249,9 +241,9 @@ Function File_Find(DirName As String, FileName As String) As String
    Dim D As String, F As String
    'Check if file in this directory
    If Dir(DirName & FileName)<>"" Then Return DirName & FileName
-   D= Dir(DirName,vbDirectory)
+   D= Dir(DirName & "*" ,vbDirectory) & "\"
    While D <> "" ' look in each subdirectory
-      F=File_Find(DirName & "\" & D, FileName)
+      F=File_Find(DirName & D, FileName)
       If F <> "" Then Return F
    Wend
    Return "" ' file not in this directory
