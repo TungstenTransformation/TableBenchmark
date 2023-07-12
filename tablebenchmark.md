@@ -52,7 +52,7 @@ End Sub
 
 Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, TableFieldName As String, SumColumnNames, SumColumnAmountFormatter As CscAmountFormatter)
    'Calculate all the table meta fields for the benchmark using the table in Reference Document as the reference. It may or may not be true.
-   Dim Table As CscXDocTable, SumIsValid As Boolean, Field As CscXDocField, FieldName As String, ErrDescription As String, RefTable As CscXDocTable, SumColumnName As String
+   Dim Table As CscXDocTable, SumIsValid As Boolean, Field As CscXDocField, FieldName As String, ErrDescription As String, RefTable As CscXDocTable, SumColumnName As String, R As Long
    Set Table=pXDoc.Fields.ItemByName(TableFieldName).Table
    Set Field=pXDoc.Fields.ItemByName("TableRowCount")
    Field.Text=CStr(Table.Rows.Count)
@@ -60,6 +60,9 @@ Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, Tabl
    If SumColumnNames<>"" Then
       For Each SumColumnName In Split(SumColumnNames,",")
          Set Field=pXDoc.Fields.ItemByName("Table" & Replace(SumColumnName," ","")&"Sum")
+         For R=0 To Table.Rows.Count-1 'format the table cells in the summable column so that we can sum them
+            SumColumnAmountFormatter.FormatTableCell(Table.Rows(R).Cells.ItemByName(SumColumnName))
+         Next
          Field.Text=Format(Table.GetColumnSum(Table.Columns.ItemByName(SumColumnName).IndexInTable,SumIsValid),"0.00")
          If SumIsValid Then SumColumnAmountFormatter.FormatField(Field)
          Field.Confidence=1.00: Field.ExtractionConfident=True
