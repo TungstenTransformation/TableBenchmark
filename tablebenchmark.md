@@ -53,6 +53,7 @@ End Sub
 Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, TableFieldName As String, SumColumnNames, SumColumnAmountFormatter As CscAmountFormatter)
    'Calculate all the table meta fields for the benchmark using the table in Reference Document as the reference. It may or may not be true.
    Dim Table As CscXDocTable, SumIsValid As Boolean, Field As CscXDocField, FieldName As String, ErrDescription As String, RefTable As CscXDocTable, SumColumnName As String, R As Long
+   Dim Scale As Double
    Set Table=pXDoc.Fields.ItemByName(TableFieldName).Table
    Set Field=pXDoc.Fields.ItemByName("TableRowCount")
    Field.Text=CStr(Table.Rows.Count)
@@ -72,12 +73,13 @@ Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, Tabl
    'Here we compare the extracted table with the truth table from the xdoc in the filesystem
    Set RefTable=RefDoc.Fields.ItemByName(TableFieldName).Table
    Set Field=pXDoc.Fields.ItemByName("TableRowAlignment")
-   Field.Text=Format(Tables_RowAlignment(pXDoc,Table,RefTable,ErrDescription),"0.00")
+   Scale=pXDoc.CDoc.Pages(0).XRes/RefDoc.CDoc.Pages(0).XRes 'The document coming back from KTA may have different dpi resolution.
+   Field.Text=Format(Tables_RowAlignment(pXDoc,Table,RefTable,Scale,ErrDescription),"0.00")
    If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf & " Bad Rows:" & ErrDescription ' so we can see the misaligned row numbers in the benchmark
    Field.Confidence=1.00: Field.ExtractionConfident=True
    ErrDescription=""
    Set Field=pXDoc.Fields.ItemByName("TableColumnAlignment")
-   Field.Text=Format(Tables_ColumnAlignment(pXDoc,Table,RefTable, ErrDescription),"0.00")
+   Field.Text=Format(Tables_ColumnAlignment(pXDoc,Table,RefTable, Scale, ErrDescription),"0.00")
    If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf & " Bad Columns:" & ErrDescription ' so we can see the misaligned column numbers in the benchmark
    Field.Confidence=1.00: Field.ExtractionConfident=True
    Set Field=pXDoc.Fields.ItemByName("TableCells")
@@ -97,31 +99,31 @@ Function Field_Set(pXDoc As CscXDocument, FieldName As String, FieldText As Stri
 End Function
 
 
-Function Tables_RowAlignment(pXDoc As CscXDocument, Table As CscXDocTable, TruthTable As CscXDocTable, ByRef ErrDescription As String) As Double
+Function Tables_RowAlignment(pXDoc As CscXDocument, Table As CscXDocTable, RefTable As CscXDocTable, Scale As Double, ByRef ErrDescription As String) As Double
    Dim Alignment As Double, R As Long, TotalAlignment As Double
    ErrDescription=""
    If Table.Rows.Count=0 Then Return 0
-   If TruthTable.Rows.Count=0 Then Return 0
+   If RefTable.Rows.Count=0 Then Return 0
    For R=0 To Table.Rows.Count-1
-      If R<TruthTable.Rows.Count Then
-         Alignment =Rows_Alignment(Table.Rows(R),TruthTable.Rows(R))
+      If R<RefTable.Rows.Count Then
+         Alignment =Rows_Alignment(Table.Rows(R),RefTable.Rows(R),Scale)
          If Alignment <1.00 Then ErrDescription=ErrDescription & CStr(R+1) & ","
          TotalAlignment=TotalAlignment+ Alignment
       End If
    Next
    If ErrDescription<>"" Then ErrDescription= Left(ErrDescription,Len(ErrDescription)-1) 'remove trailing space
-   Return TotalAlignment/Max(Table.Rows.Count,TruthTable.Rows.Count) ' returns 1.00 if perfect alignment
+   Return TotalAlignment/Max(Table.Rows.Count,RefTable.Rows.Count) ' returns 1.00 if perfect alignment
 End Function
 
-Function Rows_Alignment(Row1 As CscXDocTableRow, Row2 As CscXDocTableRow) As Double
+Function Rows_Alignment(Row1 As CscXDocTableRow, Row2 As CscXDocTableRow, Scale As Double) As Double
    Dim A As Double, B As Double, Overlap As Double, P As Long, Pages As Long
    'Some rows can page wrap onto another page. It's actually possible for a single row to cover many pages, but unlikely.
    If Row1.StartPage<>Row2.StartPage Then Return 0
    If Row1.EndPage<>Row2.EndPage Then Return 0
    For P=Row1.StartPage To Row1.EndPage
       If Row1.Height(P)>0 And Row2.Height(P)>0 Then
-         A=Max(Row1.Top(P)+Row1.Height(P)-Row2.Top(P),0) ' distance from top of row2 to bottom of row1
-         B=Max(Row2.Top(P)+Row2.Height(P)-Row1.Top(P),0) ' distance from top of row1 to bottom of row2
+         A=Max(Row1.Top(P)+Row1.Height(P)-Row2.Top(P)*Scale,0) ' distance from top of row2 to bottom of row1
+         B=Max(Row2.Top(P)+Row2.Height(P)-Row1.Top(P)*Scale,0) ' distance from top of row1 to bottom of row2
          Overlap =Overlap+ Min(A,B)/Max(A,B) ' divide the inside overlap by the outer span. If they are the same, then it gives 1.00
       End If
    Next
@@ -129,14 +131,14 @@ Function Rows_Alignment(Row1 As CscXDocTableRow, Row2 As CscXDocTableRow) As Dou
    Return Overlap/Pages
 End Function
 
-Function Tables_ColumnAlignment(pXDoc As CscXDocument, Table As CscXDocTable,TruthTable As CscXDocTable,ByRef ErrDescription As String) As Double
+Function Tables_ColumnAlignment(pXDoc As CscXDocument, Table As CscXDocTable,RefTable As CscXDocTable,Scale As Double, ByRef ErrDescription As String) As Double
    Dim Alignment As Double, C As Long
    Dim TotalAlignment As Double
    ErrDescription=""
-   If Table.Columns.Count<> TruthTable.Columns.Count Then Return 0 ' these tables are not using the same table model!!!
+   If Table.Columns.Count<> RefTable.Columns.Count Then Return 0 ' these tables are not using the same table model!!!
    For C=0 To Table.Columns.Count-1
-      If C<TruthTable.Columns.Count Then
-         Alignment=Columns_Alignment(Table.Columns(C),TruthTable.Columns(C),Table)
+      If C<RefTable.Columns.Count Then
+         Alignment=Columns_Alignment(Table.Columns(C),RefTable.Columns(C),Scale,Table)
          If Alignment <1.00 Then ErrDescription=ErrDescription & CStr(C+1) & ","
          TotalAlignment=TotalAlignment+ Alignment
       End If
@@ -146,7 +148,7 @@ Function Tables_ColumnAlignment(pXDoc As CscXDocument, Table As CscXDocTable,Tru
 End Function
 
 
-Function Columns_Alignment(Column1 As CscXDocTableColumn, Column2 As CscXDocTableColumn, Table As CscXDocTable) As Double
+Function Columns_Alignment(Column1 As CscXDocTableColumn, Column2 As CscXDocTableColumn, Scale As Double, Table As CscXDocTable) As Double
    Dim A As Double, B As Double, Overlap As Double, P As Long, Pages As Long, StartPage As Long, EndPage As Long
    If Column1.StartPage<>Column2.StartPage Then Return 0
    If Column1.EndPage<>Column2.EndPage Then Return 0
@@ -156,8 +158,8 @@ Function Columns_Alignment(Column1 As CscXDocTableColumn, Column2 As CscXDocTabl
       If Column1.Width(P)=0 And Column2.Width(P)=0 Then
          Overlap=Overlap+1' we allow empty columns
       Else
-         A=Max(Column1.Left(P)+Column1.Width(P)-Column2.Left(P),0)
-         B=Max(Column2.Left(P)+Column2.Width(P)-Column1.Left(P),0)
+         A=Max(Column1.Left(P)+Column1.Width(P)-Column2.Left(P)/Scale,0)
+         B=Max(Column2.Left(P)+Column2.Width(P)-Column1.Left(P)/Scale,0)
          Overlap=Overlap+Min(A,B)/Max(A,B)
       End If
    Next
