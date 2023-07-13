@@ -42,7 +42,7 @@ Private Sub Document_AfterExtract(ByVal pXDoc As CASCADELib.CscXDocument)
       TestDocFileName=TestSets_FindXDoc(pXDoc.XValues.ItemByName("OriginalFileName").Value)
       If TestDocFileName="" Then Exit Sub ' this document is unknown and not in a Test Set
       TestDoc.Load(TestDocFileName)
-      XDocument_CopyFields(RefDoc,TestDoc) 'copy truth back to original document
+      XDocument_CopyFields(pXDoc,TestDoc) 'copy truth back to original test document
       TestDoc.Save()
    Else ' this is not a truth document, and we are in Design studio - this is either extraction testing or benchmarking
       RefDoc.Load(pXDoc.FileName)
@@ -263,6 +263,7 @@ Sub Field_Copy(A As CscXDocField,B As CscXDocField,XScale As Double, YScale As D
    Dim R As Long, ARows As CscXDocTableRows, BRows As CscXDocTableRows, C As Long
    Select Case A.FieldType
    Case CscExtractionFieldType.CscFieldTypeSimpleField
+      B.Text=A.Text
       B.PageIndex=A.PageIndex
       B.Left=A.Left*XScale
       B.Top=A.Top*YScale
