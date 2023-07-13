@@ -79,6 +79,7 @@ Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, Tabl
    Field.Confidence=1.00: Field.ExtractionConfident=True
    ErrDescription=""
    Set Field=pXDoc.Fields.ItemByName("TableColumnAlignment")
+   Scale=pXDoc.CDoc.Pages(0).YRes/RefDoc.CDoc.Pages(0).YRes 'The document coming back from KTA may have different dpi resolution.
    Field.Text=Format(Tables_ColumnAlignment(pXDoc,Table,RefTable, Scale, ErrDescription),"0.00")
    If ErrDescription <> "" Then Field.Text= Field.Text & vbCrLf & " Bad Columns:" & ErrDescription ' so we can see the misaligned column numbers in the benchmark
    Field.Confidence=1.00: Field.ExtractionConfident=True
@@ -149,7 +150,7 @@ End Function
 
 
 Function Columns_Alignment(Column1 As CscXDocTableColumn, Column2 As CscXDocTableColumn, Scale As Double, Table As CscXDocTable) As Double
-   Dim A As Double, B As Double, Overlap As Double, P As Long, Pages As Long, StartPage As Long, EndPage As Long
+   Dim A As Double, B As Double, Overlap As Double, P As Long, StartPage As Long, EndPage As Long
    If Column1.StartPage<>Column2.StartPage Then Return 0
    If Column1.EndPage<>Column2.EndPage Then Return 0
    StartPage=Table.Rows(0).StartPage 'There is a bug that Column.StartPage and Column.EndPage are always -1, so i need to read from rows.
@@ -163,8 +164,7 @@ Function Columns_Alignment(Column1 As CscXDocTableColumn, Column2 As CscXDocTabl
          Overlap=Overlap+Min(A,B)/Max(A,B)
       End If
    Next
-   Pages = Max(Column1.EndPage-Column1.StartPage+1,Column2.EndPage-Column2.StartPage+1) ' calculate how many pages
-   Return Overlap/Pages
+   Return Overlap/(EndPage-StartPage+1)
 End Function
 
 Function Tables_CompareCells(Table As CscXDocTable, TruthTable As CscXDocTable, ByRef ErrDescription As String) As Double
