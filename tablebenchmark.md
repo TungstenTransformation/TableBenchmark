@@ -32,26 +32,27 @@ Private Sub Document_AfterExtract(ByVal pXDoc As CASCADELib.CscXDocument)
    If Project.ScriptExecutionMode <> CscScriptExecutionMode.CscScriptModeServerDesign Then Exit Sub  'Only run benchmark in Transformation Designer, not KTA
    'If the XDoc contains the XValue "OriginalFileName" then it is an online learning sample that came from KTA - so it contains the truth.
    If pXDoc.XValues.ItemExists("OriginalFileName") Then
-      'This is a new sample that came from KTA . We need to copy the truth back into the original document
+      'This is a new sample that came from KTA . We need to copy the truth back into the original test document
       'But the locators just ran and have incorrect values - we need to ignore them and load the file from the file system.
       RefDoc.Load(pXDoc.FileName)
       XDocument_CopyFields(RefDoc,pXDoc) 'restore the truth fields into new sample document
+      'Calculate the table benchmarkfields in the new sample document. They will be perfect
       TableBenchmark_Calculate(pXDoc, RefDoc,"LineItems", "Total Price", DefaultAmountFormatter)
       pXDoc.Save()
-      'When you drag an xdoc from samples set to test set it is added to a subfolder. The matching original is in the parent directory
+      'Find the original TestDocument that is in either a test document set or a benchmark document set
       TestDocFileName=TestSets_FindXDoc(pXDoc.XValues.ItemByName("OriginalFileName").Value)
-      If TestDocFileName="" Then Exit Sub ' this document is unknown and not in a Test Set
+      If TestDocFileName="" Then Exit Sub ' this document is unknown and not in a Test Set or benchmark set
       TestDoc.Load(TestDocFileName)
       XDocument_CopyFields(pXDoc,TestDoc) 'copy truth back to original test document
       TestDoc.Save()
-   Else ' this is not a truth document, and we are in Design studio - this is either extraction testing or benchmarking
+   Else ' this is not a truth document and we are in Design studio - this is either extraction testing or benchmarking
       RefDoc.Load(pXDoc.FileName)
       TableBenchmark_Calculate(pXDoc, RefDoc, "LineItems", "Total Price", DefaultAmountFormatter)
    End If
 End Sub
 
 Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, TableFieldName As String, SumColumnNames, SumColumnAmountFormatter As CscAmountFormatter)
-   'Calculate all the table meta fields for the benchmark using the table in Reference Document as the reference. It may or may not be true.
+   'Calculate all the table meta fields for the benchmark using the table in Reference Document as the reference. The RefDoc should contain the truth.
    Dim Table As CscXDocTable, SumIsValid As Boolean, Field As CscXDocField, FieldName As String, ErrDescription As String, RefTable As CscXDocTable, SumColumnName As String, R As Long
    Dim Scale As Double
    Set Table=pXDoc.Fields.ItemByName(TableFieldName).Table
@@ -69,7 +70,7 @@ Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, Tabl
          Field.Confidence=1.00: Field.ExtractionConfident=True
       Next
    End If
-   If Not RefDoc.Fields.Exists(TableFieldName) Then Exit Sub ' There are no fields in the truth document. nothing to do
+   If Not RefDoc.Fields.Exists(TableFieldName) Then Exit Sub ' There are no fields in the reference document. It probably wasn't classified, so there is nothing to do here
    'Here we compare the extracted table with the truth table from the xdoc in the filesystem
    Set RefTable=RefDoc.Fields.ItemByName(TableFieldName).Table
    Set Field=pXDoc.Fields.ItemByName("TableRowAlignment")
@@ -90,7 +91,7 @@ Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, Tabl
 End Sub
 
 Function Field_Set(pXDoc As CscXDocument, FieldName As String, FieldText As String, Confidence As Double, ErrDescription As String) As CscXDocField
-   'Set attributes of a Field on one statement
+   'Set attributes of a Field
    Dim Field As CscXDocField
    Set Field=pXDoc.Fields.ItemByName(FieldName)
    Field.Text=FieldText
@@ -223,27 +224,27 @@ Sub XDocument_CopyFields(A As CscXDocument, B As CscXDocument)
    Next
 End Sub
 
-Function File_GetParentFolder(PathName As String) As String
-   'Return the ParentFolder
-   If Right(PathName,1)="\" Then PathName=Left(PathName,Len(PathName)-1)
-   Return Left(PathName,InStrRev(PathName,"\"))
-End Function
-
-
 Function TestSets_FindXDoc(FileName As String) As String
-   'Search Test and Benchmark sets for this XDocument
+   'Search Test and Benchmark sets for this FileName
    Dim T As Long, DirName As String, FullPath As String
    FileName= Left(FileName,InStrRev(FileName,".")) & "xdc"
-   For T=0 To Project.GetDocSetPathTestDocumentsCount
+   For T=0 To Project.GetDocSetPathTestDocumentsCount-1
       DirName = Split(Project.GetDocSetPathTestDocumentsByIndex(T),"|")(0) & "\"
       FullPath=File_Find(DirName,FileName)
       If FullPath <> "" Then Return FullPath
    Next
-   For T=0 To Project.GetDocSetPathBenchmarksCount
+   For T=0 To Project.GetDocSetPathBenchmarksCount-1
       DirName = Split(Project.GetDocSetPathBenchmarksByIndex(T),"|")(0) & "\"
       FullPath=File_Find(DirName,FileName)
       If FullPath <> "" Then Return FullPath
    Next
+   Return "" ' File not Found anywhere
+End Function
+
+Function File_GetParentFolder(PathName As String) As String
+   'Return the ParentFolder
+   If Right(PathName,1)="\" Then PathName=Left(PathName,Len(PathName)-1)
+   Return Left(PathName,InStrRev(PathName,"\"))
 End Function
 
 Function File_Find(DirName As String, FileName As String) As String
@@ -259,10 +260,11 @@ Function File_Find(DirName As String, FileName As String) As String
    Return "" ' file not in this directory
 End Function
 
-Sub Field_Copy(A As CscXDocField,B As CscXDocField,XScale As Double, YScale As Double) 'copy a field or a table
+Sub Field_Copy(A As CscXDocField,B As CscXDocField,XScale As Double, YScale As Double)
+   'copy a field or a table
    Dim R As Long, ARows As CscXDocTableRows, BRows As CscXDocTableRows, C As Long
    Select Case A.FieldType
-   Case CscExtractionFieldType.CscFieldTypeSimpleField
+   Case CscExtractionFieldType.CscFieldTypeSimpleField 'simple field
       B.Text=A.Text
       B.PageIndex=A.PageIndex
       B.Left=A.Left*XScale
@@ -276,7 +278,7 @@ Sub Field_Copy(A As CscXDocField,B As CscXDocField,XScale As Double, YScale As D
       B.DateValue=A.DateValue
       B.DateFormatted=A.DateFormatted
       B.DoubleFormatted=A.DoubleFormatted
-   Case CscExtractionFieldType.CscFieldTypeTable
+   Case CscExtractionFieldType.CscFieldTypeTable  'table field
       Set ARows=A.Table.Rows
       Set BRows=B.Table.Rows
       BRows.Clear
@@ -290,7 +292,8 @@ Sub Field_Copy(A As CscXDocField,B As CscXDocField,XScale As Double, YScale As D
    End Select
 End Sub
 
-Sub TableCell_Copy(A As CscXDocTableCell, B As CscXDocTableCell,XScale As Double, YScale As Double) 'copy a single table cell
+Sub TableCell_Copy(A As CscXDocTableCell, B As CscXDocTableCell,XScale As Double, YScale As Double)
+   'copy a single table cell
    Dim Word As New CscXDocWord
    Word.PageIndex=A.PageIndex
    Word.Left=A.Left*XScale
