@@ -90,6 +90,7 @@ Sub TableBenchmark_Calculate(pXDoc As CscXDocument, RefDoc As CscXDocument, Tabl
 End Sub
 
 Function Field_Set(pXDoc As CscXDocument, FieldName As String, FieldText As String, Confidence As Double, ErrDescription As String) As CscXDocField
+   'Set attributes of a Field on one statement
    Dim Field As CscXDocField
    Set Field=pXDoc.Fields.ItemByName(FieldName)
    Field.Text=FieldText
@@ -99,8 +100,8 @@ Function Field_Set(pXDoc As CscXDocument, FieldName As String, FieldText As Stri
    Return Field
 End Function
 
-
 Function Tables_RowAlignment(pXDoc As CscXDocument, Table As CscXDocTable, RefTable As CscXDocTable, Scale As Double, ByRef ErrDescription As String) As Double
+   'Calculate the pixel alignment from 0% to 100% between the rows of two tables.
    Dim Alignment As Double, R As Long, TotalAlignment As Double
    ErrDescription=""
    If Table.Rows.Count=0 Then Return 0
@@ -117,6 +118,7 @@ Function Tables_RowAlignment(pXDoc As CscXDocument, Table As CscXDocTable, RefTa
 End Function
 
 Function Rows_Alignment(Row1 As CscXDocTableRow, Row2 As CscXDocTableRow, Scale As Double) As Double
+   'Calculate the pixel alignment from 0% to 100% between two rows.
    Dim A As Double, B As Double, Overlap As Double, P As Long, Pages As Long
    'Some rows can page wrap onto another page. It's actually possible for a single row to cover many pages, but unlikely.
    If Row1.StartPage<>Row2.StartPage Then Return 0
@@ -133,6 +135,7 @@ Function Rows_Alignment(Row1 As CscXDocTableRow, Row2 As CscXDocTableRow, Scale 
 End Function
 
 Function Tables_ColumnAlignment(pXDoc As CscXDocument, Table As CscXDocTable,RefTable As CscXDocTable,Scale As Double, ByRef ErrDescription As String) As Double
+   'Calculate the pixel alignment from 0% to 100% between the columns of two tables.
    Dim Alignment As Double, C As Long
    Dim TotalAlignment As Double
    ErrDescription=""
@@ -150,6 +153,7 @@ End Function
 
 
 Function Columns_Alignment(Column1 As CscXDocTableColumn, Column2 As CscXDocTableColumn, Scale As Double, Table As CscXDocTable) As Double
+   'Calculate the pixel alignment from 0% to 100% between two columns.
    Dim A As Double, B As Double, Overlap As Double, P As Long, StartPage As Long, EndPage As Long
    If Column1.StartPage<>Column2.StartPage Then Return 0
    If Column1.EndPage<>Column2.EndPage Then Return 0
@@ -168,6 +172,7 @@ Function Columns_Alignment(Column1 As CscXDocTableColumn, Column2 As CscXDocTabl
 End Function
 
 Function Tables_CompareCells(Table As CscXDocTable, TruthTable As CscXDocTable, ByRef ErrDescription As String) As Double
+   'Return a score between 0% and 100% of the textual match between all cells in two tables. Count all errors and Report up to 10 errors
    Dim R As Long, C As Long, Cell As CscXDocTableCell, TruthCell As CscXDocTableCell, Errors As Long
    Const MAXERRORS=10 'only show this many errors
    'Check that all the table cells agree
@@ -191,7 +196,7 @@ Function Tables_CompareCells(Table As CscXDocTable, TruthTable As CscXDocTable, 
       Next
    Next
    ErrDescription = "Total Cell Errors: " & CStr(Errors) & vbCrLf & ErrDescription
-   Return 1-Errors/Table.Rows.Count/Table.Columns.Count
+   Return 1.0-Errors/Table.Rows.Count/Table.Columns.Count
 End Function
 
 Function String_Truncate(A As String) As String
