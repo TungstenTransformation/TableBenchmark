@@ -40,6 +40,7 @@ Private Sub Document_AfterExtract(ByVal pXDoc As CASCADELib.CscXDocument)
       TableBenchmark_Calculate(pXDoc, RefDoc,"LineItems", "Total Price", DefaultAmountFormatter)
       pXDoc.Save()
       'Find the original TestDocument that is in either a test document set or a benchmark document set
+      '!!!!! Make sure your Xdocuments are in an OPEN testset that is Attached to the Project !!!! (otherwise it will not be found)
       TestDocFileName=TestSets_FindXDoc(pXDoc.XValues.ItemByName("OriginalFileName").Value)
       If TestDocFileName="" Then Exit Sub ' this document is unknown and not in a Test Set or benchmark set
       TestDoc.Load(TestDocFileName)
@@ -253,7 +254,7 @@ Function File_Find(DirName As String, FileName As String) As String
    'Check if file in this directory
    If Dir(DirName & FileName)<>"" Then Return DirName & FileName
    D= Dir(DirName & "*" ,vbDirectory) & "\"
-   While D <> "" ' look in each subdirectory
+   While D <> "" And D <> ".\" ' look in each subdirectory
       F=File_Find(DirName & D, FileName)
       If F <> "" Then Return F
    Wend
